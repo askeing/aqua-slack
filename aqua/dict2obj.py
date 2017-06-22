@@ -1,3 +1,6 @@
+# -*- encoding: utf-8 -*-
+
+
 class Dict2Obj(object):
 
     def __init__(self, dict_obj):

@@ -1,3 +1,6 @@
+# -*- encoding: utf-8 -*-
+
+
 class Util(object):
 
     @staticmethod
@@ -51,3 +54,10 @@ class Util(object):
         :return:
         """
         return slack_client.server.channels.find(search_string)
+
+    @staticmethod
+    def load_cmd_class(cmd_class_name):
+        mod_name, clz_name = cmd_class_name.rsplit('.', 1)
+        mod = __import__(mod_name, fromlist=[clz_name])
+        clz = getattr(mod, clz_name)
+        return clz

@@ -1,3 +1,5 @@
+# -*- encoding: utf-8 -*-
+
 from dict2obj import Dict2Obj
 
 
