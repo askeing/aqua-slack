@@ -25,7 +25,7 @@ class AquaBot(object):
     }
 
     COMMANDS_HANDLERS = {
-        r'(hello|hi|greeting)': 'cmd.greeting.Greeting',
+        r'(^|.*\s+)(hello|hi|greeting)(\s+|$)': 'bot_cmd.greeting.Greeting',
     }
 
     def __init__(self):
@@ -120,12 +120,29 @@ class AquaBot(object):
         :param rtm_result:
         :return:
         """
-        # getting message text
-        message = rtm_result.get('text').encode('utf-8')
+        self.logger.info('### RTM income payload: {}'.format(rtm_result))
 
-        # getting user and channel id
-        user_id = rtm_result.get('user')
+        # if message changed, it will have subtype
+        text = None
+        if rtm_result.get('subtype') == 'message_changed':
+            new_msg = rtm_result.get('message')
+            if new_msg:
+                text = new_msg.get('text')
+                # getting user and channel id
+                user_id = new_msg.get('user')
+            else:
+                return True
+        else:
+            # getting message text
+            text = rtm_result.get('text')
+            # getting user and channel id
+            user_id = rtm_result.get('user')
         channel_id = rtm_result.get('channel')
+
+        if text:
+            message = text.encode('utf-8')
+        else:
+            return True
 
         # Skip if message comes from bot it-self
         if user_id == self.bot_id:
@@ -171,7 +188,7 @@ class AquaBot(object):
 
         # If Bot has been tagged, parsing commands
         if is_tag_bot:
-            self.parse_commands(user_obj=user_obj, channel_obj=channel_obj, words_list=message_words_list)
+            self.parse_commands(user_obj=user_obj, channel_obj=channel_obj, words_list=message_words_list, origin_message=message)
         return True
 
     def parse_text(self, text):
@@ -189,7 +206,7 @@ class AquaBot(object):
         result = [item for item in text.split() if item != bot_id_tag]
         return is_tag_bot, result
 
-    def parse_commands(self, user_obj, channel_obj, words_list):
+    def parse_commands(self, user_obj, channel_obj, words_list, origin_message):
         """
 
         :param user_obj:
@@ -211,6 +228,25 @@ class AquaBot(object):
                                                                                             t=words_list))
 
         # if there is text message
+        # looping all commands handlers
+        for loaded_command_re in self.COMMANDS_HANDLERS.keys():
+            # if match then do command
+            re_ret = re.match(loaded_command_re, origin_message)
+            if re_ret:
+                command_class_name = self.COMMANDS_HANDLERS.get(loaded_command_re)
+                if command_class_name:
+                    # getting cmd class and running
+                    cmd_clz = Util.load_cmd_class(command_class_name)
+
+                    # command interface:
+                    #     user_obj, channel_obj, words_list, slack_client
+                    self.logger.info('=> parse_commands: WORD [{w}] to CMD [{cmd}]'.format(w=re_ret.groups(),
+                                                                                           cmd=command_class_name))
+                    cmd_clz.run(user_obj, channel_obj, words_list, self.slack_client)
+                    return True
+
+        """
+        # if there is text message
         for word in words_list:
             # looping all commands handlers
             for loaded_command_re in self.COMMANDS_HANDLERS.keys():
@@ -220,13 +256,13 @@ class AquaBot(object):
                     if command_class_name:
                         # getting cmd class and running
                         cmd_clz = Util.load_cmd_class(command_class_name)
-                        """
-                        command interface:
-                            user_obj, channel_obj, words_list, slack_client
-                        """
+
+                        # command interface:
+                        #     user_obj, channel_obj, words_list, slack_client
                         self.logger.info('=> parse_commands: WORD [{w}] to CMD [{cmd}]'.format(w=word, cmd=command_class_name))
                         cmd_clz.run(user_obj, channel_obj, words_list, self.slack_client)
                         return True
+        """
         return True
 
     def run(self):
