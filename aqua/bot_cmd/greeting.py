@@ -1,18 +1,26 @@
 # -*- encoding: utf-8 -*-
-
+import os
+import random
 import logging
 from base_cmd import BaseCmd
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(os.path.basename(__file__))
 
 
 class Greeting(BaseCmd):
 
-    @classmethod
-    def run(cls, user_obj, channel_obj, words_list, slack_client):
-        response_text = '<@{uid}> アクシズ教を！アクシズ教をお願いします！'.format(uid=user_obj.id)
+    GREETING_MESSAGES = [
+        '女神アクアの祝福を！',
+        'アクシズ教を！アクシズ教をお願いします！',
+        '汝！もし私の信者ならば……お金を貸してくれると助かります！',
+        'うっふふふふふ。まあ、それほどでも～、ありますけど'
+    ]
 
-        logger.info('=> To {u}: {msg}'.format(u=user_obj.name, msg=response_text))
+    def run(self):
+        response_text = '<@{uid}> {msg}'.format(uid=self.user_obj.id,
+                                                msg=random.choice(self.GREETING_MESSAGES))
 
-        slack_client.api_call("chat.postMessage", channel=channel_obj.id, text=response_text, as_user=True)
+        logger.info('=> To {u}: {msg}'.format(u=self.user_obj.name, msg=response_text))
+
+        self.send(response_text)
         return True

@@ -8,7 +8,6 @@ import logging
 from slackclient import SlackClient
 
 from util import Util
-from slack_user import SlackUser
 
 logging.basicConfig(level=logging.INFO)
 
@@ -24,13 +23,28 @@ class AquaBot(object):
         'message': 'handle_rtm_message',
     }
 
+    COMMANDS_TYPE_CLASS = 'class'
+    COMMANDS_TYPE_HELP = 'help'
+
+    # The sequential of handlers will effect the checking sequence
     COMMANDS_HANDLERS = {
-        r'(^|.*\s+)(hello|hi|greeting)(\s+|$)': 'bot_cmd.greeting.Greeting',
+        r'(^|.*\s+)(help)(\s+|$)': {
+            'type': 'help',
+            'method': 'show_usage',
+            'usage': 'help\tShow usage information.'
+        },
+        r'(^|.*\s+)(hello|hi|greeting)(\s+|$)': {
+            'type': 'class',
+            'class': 'bot_cmd.greeting.Greeting',
+            'usage': 'hello|hi|greeting\tGreeting :)'
+        }
     }
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config_file = self.load_config()
+        self.commands_usage = self.load_commands_usage()
+
         self.bot_name = self.config_file.get(self.KEY_BOT_NAME).lower()
         self.api_token = self.config_file.get(self.KEY_API_TOKEN)
         self.bot_id = None
@@ -53,41 +67,25 @@ class AquaBot(object):
             self.logger.error('There is no config file, {}.'.format(file_path))
         raise Exception('There is no config file, {}.'.format(file_path))
 
-    def load_slack_users(self):
-        """
-        https://api.slack.com/methods/users.list
-        :return: a list of user objects.
-        """
-        result_list = []
-        ret = self.slack_client.api_call('users.list')
-        if ret.get('ok'):
-            origin_list = ret.get('members')
-            for obj in origin_list:
-                try:
-                    result_list.append(SlackUser(obj))
-                except Exception as e:
-                    self.logger.warn('Loading object failed, {obj}.\n{e}'.format(obj=obj, e=e))
-        else:
-            self.logger.warn('Loading Slack users list failed.')
-        return result_list
+    def load_commands_usage(self):
+        usage_fmt = '- {cmd_usage}'
+        usage_list = ['今回のクエストの報酬わぁ、おいくら万円？\n']
+        for command_handler_obj in self.COMMANDS_HANDLERS.values():
+            command_usage = command_handler_obj.get('usage')
+            if command_usage:
+                usage_list.append(usage_fmt.format(cmd_usage=command_usage))
+        return '\n'.join(usage_list)
 
-    def load_slack_channels(self):
+    def show_usage(self, **kwargs):
         """
-        https://api.slack.com/methods/channels.list
-        :return: a list of limited channel objects.
+        There are (user_obj, channel_obj, users_list, words_list, origin_message, slack_client) contain in kwargs.
         """
-        result_list = []
-        ret = self.slack_client.api_call('channels.list')
-        if ret.get('ok'):
-            origin_list = ret.get('channels')
-            for obj in origin_list:
-                try:
-                    result_list.append(SlackUser(obj))
-                except Exception as e:
-                    self.logger.warn('Loading object failed, {obj}.\n{e}'.format(obj=obj, e=e))
+        channel_obj = kwargs.get('channel_obj')
+        if channel_obj:
+            Util.send(send_message=self.commands_usage, channel_obj=channel_obj, slack_client=self.slack_client)
+            return True
         else:
-            self.logger.warn('Loading Slack channels list failed.')
-        return result_list
+            return False
 
     def api_send_message(self, message, channel):
         """
@@ -123,7 +121,6 @@ class AquaBot(object):
         self.logger.info('### RTM income payload: {}'.format(rtm_result))
 
         # if message changed, it will have subtype
-        text = None
         if rtm_result.get('subtype') == 'message_changed':
             new_msg = rtm_result.get('message')
             if new_msg:
@@ -162,7 +159,7 @@ class AquaBot(object):
                                                                                             t=message))
 
         # parsing the message
-        is_tag_bot, message_words_list = self.parse_text(text=message)
+        is_tag_bot, users_list, words_list = self.parse_message_text(text=message)
         """
         Checking Direct Message.
         There are two rules:
@@ -178,40 +175,44 @@ class AquaBot(object):
                                                                                   cid=channel_id,
                                                                                   u=user_name,
                                                                                   uid=user_id,
-                                                                                  msg=message_words_list))
+                                                                                  msg=message))
         else:
             self.logger.info('[Channel: {c}/{cid}] From: {u}/{uid}, Msg: {msg}'.format(c=channel_name,
                                                                                        cid=channel_id,
                                                                                        u=user_name,
                                                                                        uid=user_id,
-                                                                                       msg=message_words_list))
+                                                                                       msg=message))
 
         # If Bot has been tagged, parsing commands
         if is_tag_bot:
-            self.parse_commands(user_obj=user_obj, channel_obj=channel_obj, words_list=message_words_list, origin_message=message)
+            self.parse_commands(user_obj=user_obj,
+                                channel_obj=channel_obj,
+                                users_list=users_list,
+                                words_list=words_list,
+                                origin_message=message)
         return True
 
-    def parse_text(self, text):
+    def parse_message_text(self, text):
         """
-        Parsing the input message text,
-        return the (Boolean, list), which first value is True if the message contains Bot name,
-        second value is a list of every word of text message.
-        :param text: input message
-        :return: the (Boolean, list), which first value is True if the message contains Bot name, second value is a list of every word of text message
+        Parsing message text.
+        :param text:
+        :return: (Boolean, List, List). 1st is Bot be tagged. 2nd a list of user tag. 3rd a list of words.
         """
         bot_id_tag = '<@{bot_id}>'.format(bot_id=self.bot_id)
+        users_list, words_list = Util.parse_text_to_users_and_words(text=text)
         is_tag_bot = False
-        if bot_id_tag in text:
+        if bot_id_tag in users_list:
             is_tag_bot = True
-        result = [item for item in text.split() if item != bot_id_tag]
-        return is_tag_bot, result
+        return is_tag_bot, users_list, words_list
 
-    def parse_commands(self, user_obj, channel_obj, words_list, origin_message):
+    def parse_commands(self, user_obj, channel_obj, users_list, words_list, origin_message):
         """
 
         :param user_obj:
         :param channel_obj:
+        :param users_list:
         :param words_list:
+        :param origin_message:
         :return:
         """
         # getting id/name of channel/user
@@ -221,11 +222,11 @@ class AquaBot(object):
         channel_name = channel_obj.name if channel_obj else ''
 
         self.logger.debug('=> parse_commands\n'
-                          'User/ID: {u} / {uid}\nChannel/ID: {c} / {cid}\nText: {t}'.format(u=user_name,
-                                                                                            uid=user_id,
-                                                                                            c=channel_name,
-                                                                                            cid=channel_id,
-                                                                                            t=words_list))
+                          'User/ID: {u} / {uid}\nChannel/ID: {c} / {cid}\nMsg: {t}'.format(u=user_name,
+                                                                                           uid=user_id,
+                                                                                           c=channel_name,
+                                                                                           cid=channel_id,
+                                                                                           t=origin_message))
 
         # if there is text message
         # looping all commands handlers
@@ -233,36 +234,38 @@ class AquaBot(object):
             # if match then do command
             re_ret = re.match(loaded_command_re, origin_message)
             if re_ret:
-                command_class_name = self.COMMANDS_HANDLERS.get(loaded_command_re)
-                if command_class_name:
-                    # getting cmd class and running
-                    cmd_clz = Util.load_cmd_class(command_class_name)
+                command_handler_obj = self.COMMANDS_HANDLERS.get(loaded_command_re)
+                command_type = command_handler_obj.get('type')
 
-                    # command interface:
-                    #     user_obj, channel_obj, words_list, slack_client
-                    self.logger.info('=> parse_commands: WORD [{w}] to CMD [{cmd}]'.format(w=re_ret.groups(),
-                                                                                           cmd=command_class_name))
-                    cmd_clz.run(user_obj, channel_obj, words_list, self.slack_client)
-                    return True
-
-        """
-        # if there is text message
-        for word in words_list:
-            # looping all commands handlers
-            for loaded_command_re in self.COMMANDS_HANDLERS.keys():
-                # if match then do command
-                if re.match(loaded_command_re, word):
-                    command_class_name = self.COMMANDS_HANDLERS.get(loaded_command_re)
+                if command_type == 'class':
+                    # getting the command information
+                    command_class_name = command_handler_obj.get('class')
                     if command_class_name:
+                        self.logger.info('=> parse_commands: WORD [{w}] to CMD_C [{cmd}]'.format(w=re_ret.groups(),
+                                                                                                 cmd=command_class_name))
                         # getting cmd class and running
                         cmd_clz = Util.load_cmd_class(command_class_name)
-
                         # command interface:
-                        #     user_obj, channel_obj, words_list, slack_client
-                        self.logger.info('=> parse_commands: WORD [{w}] to CMD [{cmd}]'.format(w=word, cmd=command_class_name))
-                        cmd_clz.run(user_obj, channel_obj, words_list, self.slack_client)
-                        return True
-        """
+                        #     user_obj, channel_obj, users_list, words_list, origin_message, slack_client
+                        cmd_obj = cmd_clz(user_obj=user_obj,
+                                          channel_obj=channel_obj,
+                                          users_list=users_list,
+                                          words_list=words_list,
+                                          origin_message=origin_message,
+                                          slack_client=self.slack_client)
+                        return cmd_obj.run()
+                elif command_type == 'help':
+                    # if there is no command class, check the build-in command
+                    command_method_name = command_handler_obj.get('method')
+                    self.logger.info('=> parse_commands: WORD [{w}] to CMD_M [{cmd}]'.format(w=re_ret.groups(),
+                                                                                             cmd=command_method_name))
+                    return self.__getattribute__(command_method_name)(user_obj=user_obj,
+                                                                      channel_obj=channel_obj,
+                                                                      users_list=users_list,
+                                                                      words_list=words_list,
+                                                                      origin_message=origin_message,
+                                                                      slack_client=self.slack_client)
+
         return True
 
     def run(self):

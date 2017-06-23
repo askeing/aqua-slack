@@ -1,4 +1,8 @@
 # -*- encoding: utf-8 -*-
+import os
+import logging
+
+logger = logging.getLogger(os.path.basename(__file__))
 
 
 class Dict2Obj(object):
@@ -13,11 +17,13 @@ class Dict2Obj(object):
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+
     my_dict = {'id': 9527,
                'name': '5566 always alive.',
                'NumberOne': 'Taiwan'}
     obj = Dict2Obj(my_dict)
 
-    print('id {}'.format(obj.id))
-    print('name {}'.format(obj.name))
-    print('{} Number One!'.format(obj.NumberOne))
+    logger.info('id {}'.format(obj.id))
+    logger.info('name {}'.format(obj.name))
+    logger.info('{} Number One!'.format(obj.NumberOne))
