@@ -23,19 +23,19 @@ class AquaBot(object):
         'message': 'handle_rtm_message',
     }
 
-    COMMANDS_TYPE_CLASS = 'class'
-    COMMANDS_TYPE_HELP = 'help'
+    COMMANDS_TYPE_CLASS = 'class_cmd'
+    COMMANDS_TYPE_METHOD = 'method_cmd'
 
     # The sequential of handlers will effect the checking sequence
     COMMANDS_HANDLERS = {
         r'(^|.*\s+)(help)(\s+|$)': {
-            'type': 'help',
-            'method': 'show_usage',
+            'cmd_type': 'method_cmd',
+            'method_cmd': 'show_usage',
             'usage': 'help\tShow usage information.'
         },
         r'(^|.*\s+)(hello|hi|greeting)(\s+|$)': {
-            'type': 'class',
-            'class': 'bot_cmd.greeting.Greeting',
+            'cmd_type': 'class_cmd',
+            'class_cmd': 'bot_cmd.greeting.Greeting',
             'usage': 'hello|hi|greeting\tGreeting :)'
         }
     }
@@ -235,11 +235,11 @@ class AquaBot(object):
             re_ret = re.match(loaded_command_re, origin_message)
             if re_ret:
                 command_handler_obj = self.COMMANDS_HANDLERS.get(loaded_command_re)
-                command_type = command_handler_obj.get('type')
+                command_type = command_handler_obj.get('cmd_type')
 
-                if command_type == 'class':
+                if command_type == self.COMMANDS_TYPE_CLASS:
                     # getting the command information
-                    command_class_name = command_handler_obj.get('class')
+                    command_class_name = command_handler_obj.get(self.COMMANDS_TYPE_CLASS)
                     if command_class_name:
                         self.logger.info('=> parse_commands: WORD [{w}] to CMD_C [{cmd}]'.format(w=re_ret.groups(),
                                                                                                  cmd=command_class_name))
@@ -254,9 +254,9 @@ class AquaBot(object):
                                           origin_message=origin_message,
                                           slack_client=self.slack_client)
                         return cmd_obj.run()
-                elif command_type == 'help':
+                elif command_type == self.COMMANDS_TYPE_METHOD:
                     # if there is no command class, check the build-in command
-                    command_method_name = command_handler_obj.get('method')
+                    command_method_name = command_handler_obj.get(self.COMMANDS_TYPE_METHOD)
                     self.logger.info('=> parse_commands: WORD [{w}] to CMD_M [{cmd}]'.format(w=re_ret.groups(),
                                                                                              cmd=command_method_name))
                     return self.__getattribute__(command_method_name)(user_obj=user_obj,
