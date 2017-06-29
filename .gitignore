@@ -2,6 +2,7 @@
 .idea
 .env-python
 aqua/config.json
+aqua/channels/channels_setting.json
 
 
 # Byte-compiled / optimized / DLL files

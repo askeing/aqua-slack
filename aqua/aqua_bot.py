@@ -87,19 +87,6 @@ class AquaBot(object):
         else:
             return False
 
-    def api_send_message(self, message, channel):
-        """
-        Sending message to channel.
-        :param message: text message
-        :param channel: the channel id
-        :return: True if success, False if fail
-        """
-        ret = self.slack_client.api_call("chat.postMessage", channel=channel, text=message)
-        if not ret.get('ok'):
-            self.logger.error('Sending message faile!\n{ret}'.format(ret=ret))
-            return False
-        return True
-
     def handle_rtm(self, rtm_result):
         """
         Ref: https://api.slack.com/rtm

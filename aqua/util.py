@@ -1,10 +1,12 @@
 # -*- encoding: utf-8 -*-
+
 import os
 import re
 import logging
 
 from slack_user import SlackUser
 from slack_channel import SlackChannel
+from channels.check_channels import CheckChannels
 
 logger = logging.getLogger(os.path.basename(__file__))
 
@@ -116,7 +118,6 @@ class Util(object):
         """
         return slack_client.server.channels.find(search_string)
 
-
     @staticmethod
     def parse_text_to_users_and_words(text):
         """
@@ -153,4 +154,13 @@ class Util(object):
         :param slack_client:
         :return:
         """
-        slack_client.api_call("chat.postMessage", channel=channel_obj.id, text=send_message, as_user=True)
+        channel_checker = CheckChannels()
+        if channel_checker.is_readonly(channel_obj):
+            logger.info('Skip sending message.')
+            return False
+
+        ret = slack_client.api_call("chat.postMessage", channel=channel_obj.id, text=send_message, as_user=True)
+        if not ret.get('ok'):
+            logger.error('Sending message failed!\n{ret}'.format(ret=ret))
+            return False
+        return True
