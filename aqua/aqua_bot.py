@@ -33,7 +33,7 @@ class AquaBot(object):
             'method_cmd': 'show_usage',
             'usage': 'help\tShow usage information.'
         },
-        r'(^|.*\s+)(hello|hi|greeting)(\s+|$)': {
+        r'(^|.*\s+)(hello|hi|greeting|konnichi wa|konnichiwa|こんにちは)(\s+|$)': {
             'cmd_type': 'class_cmd',
             'class_cmd': 'bot_cmd.greeting.Greeting',
             'usage': 'hello|hi|greeting\tGreeting :)'
